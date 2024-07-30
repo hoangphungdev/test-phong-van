@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        .progress-bar {
+            width: 100%;
+            background-color: #f3f3f3;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-bar div {
+            height: 20px;
+            background-color: #4caf50;
+            width: 0%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Client</h1>
+
+        <div class="form-group">
+            <h2>Đăng nhập</h2>
+            <form id="login-form">
+                <label for="login-username">Username:</label>
+                <input type="text" id="login-username" name="username" placeholder="UserName" required>
+                <label for="login-password">Password:</label>
+                <input type="password" id="login-password" name="password" placeholder="Password" required>
+                <button type="button" onclick="login()">Đăng nhập</button>
+            </form>
+        </div>
+
+        <div class="form-group">
+            <h2>Đoán Mật Khẩu</h2>
+            <form id="guess-form">
+                <label for="guess-username">Username:</label>
+                <input type="text" id="guess-username" name="username" placeholder="UserName" required>
+                <button type="button" onclick="startGuessing()">Bắt đầu đoán</button>
+            </form>
+            <div class="progress-bar" id="progress-bar">
+                <div id="progress"></div>
+            </div>
+            <p id="progress-text"></p>
+        </div>
+    </div>
+
+    <script>
+        let found = false;
+
+        const login = async () => {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    console.log(result);
+                    alert('Đăng nhập thành công');
+                } else {
+                    console.log(result);
+                    alert('Đăng nhập thất bại');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        const startGuessing = async () => {
+            const username = document.getElementById('guess-username').value;
+            const progressBar = document.getElementById('progress');
+            const progressText = document.getElementById('progress-text');
+
+            const totalCombinations = 1000000;
+            let progress = 0;
+
+            const updateProgress = () => {
+                if (!found) {
+                    progress += 1;
+                    const percent = (progress / totalCombinations) * 100;
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = 'Tiến độ đoán: ' + percent.toFixed(2) + '%';
+                }
+            };
+
+            const makeRequest = async (password) => {
+                try {
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const result = await response.json();
+                    if (result.result === 'success') {
+                        return password;
+                    }
+                    return null;
+                } catch (error) {
+                    console.error('Error:', error);
+                    return null;
+                }
+            };
+
+            const guessPassword = async () => {
+                const chunkSize = 1000; // Số lượng mật khẩu thử trong một lần
+                const promises = [];
+                for (let i = 0; i < totalCombinations; i += chunkSize) {
+                    const end = Math.min(i + chunkSize, totalCombinations);
+                    for (let j = i; j < end; j++) {
+                        const password = String(j).padStart(6, '0');
+                        promises.push(makeRequest(password).then(foundPassword => {
+                            if (foundPassword) {
+                                found = true;
+                                console.log(foundPassword);
+                                progressText.innerHTML = 'Mật khẩu tìm thấy: ' + foundPassword;
+                                clearInterval(progressInterval);
+                                throw new Error('Password found');
+                            }
+                            updateProgress();
+                        }));
+                    }
+                    await Promise.all(promises);
+                    promises.length = 0; // Xóa danh sách promises sau khi thực hiện
+                }
+            };
+
+            const progressInterval = setInterval(updateProgress, 100);
+            try {
+                await guessPassword();
+            } catch (e) {
+                if (e.message !== 'Password found') {
+                    console.error('Error during password guessing:', e);
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
